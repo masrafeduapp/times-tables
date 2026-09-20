@@ -52,10 +52,10 @@ http.createServer(async(req,res)=>{
     if(req.method!=='GET')return out(res,405,'Method not allowed','text/plain; charset=utf-8');
     if(u.pathname==='/'||u.pathname==='/index.html')return out(res,200,home,'text/html; charset=utf-8');
     if(u.pathname==='/girls'||u.pathname==='/girls/'){
-      let html=fs.readFileSync(path.join(__dirname,'girls.html'),'utf8');html=html.replace('</body>',bridge('girls')+'</body>');return out(res,200,html,'text/html; charset=utf-8');
+      let html=fs.readFileSync(path.join(__dirname,'girls.html'),'utf8');return out(res,200,html,'text/html; charset=utf-8');
     }
     if(u.pathname==='/boys'||u.pathname==='/boys/'){
-      const r=await fetch(SOURCE,{cache:'no-store'});let html=await r.text();html=html.replace('</body>',bridge('boys')+'</body>');return out(res,200,html,'text/html; charset=utf-8');
+      const r=await fetch(SOURCE,{cache:'no-store'});let html=await r.text();return out(res,200,html,'text/html; charset=utf-8');
     }
     return out(res,404,'Not found','text/plain; charset=utf-8');
   }catch(e){console.error(e);return out(res,500,'Server error','text/plain; charset=utf-8')}
