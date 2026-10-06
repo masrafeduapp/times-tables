@@ -20,15 +20,17 @@ async function rest(pathname,options={}){
   return fetch(SB+'/rest/v1/'+pathname,{...options,headers});
 }
 async function readSupabase(section){
-  try{const r=await rest('football_quiz_state?select=state,updated_at&board_id=eq.'+boardId(section));if(!r.ok)return null;const data=await r.json();return data[0]||null}catch{return null}
+  try{const r=await rest('football_quiz_state?select=state,updated_at&board_id=eq.'+boardId(section));if(!r.ok){console.error('supabase_read',section,r.status,await r.text());return null}const data=await r.json();return data[0]||null}catch(e){console.error('supabase_read_error',section,e.message);return null}
 }
 async function saveSupabase(section,state){
   try{
     let r=await rest('football_quiz_state?board_id=eq.'+boardId(section),{method:'PATCH',headers:{'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({state,updated_at:new Date().toISOString()})});
     if(r.ok)return true;
+    console.error('supabase_patch',section,r.status,await r.text());
     r=await rest('football_quiz_state',{method:'POST',headers:{'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({board_id:boardId(section),state,updated_at:new Date().toISOString()})});
+    if(!r.ok)console.error('supabase_post',section,r.status,await r.text());
     return r.ok;
-  }catch{return false}
+  }catch(e){console.error('supabase_save_error',section,e.message);return false}
 }
 function bridge(section){
   const store=section==='girls'?'girlsMathQuiz_v1':'mathFootballQuiz_v4';
@@ -43,13 +45,14 @@ http.createServer(async(req,res)=>{
     const u=new URL(req.url,'http://local');
     if(u.pathname==='/health')return out(res,200,'ok','text/plain; charset=utf-8');
     if(u.pathname==='/api/state'&&req.method==='GET'){
-      const section=cleanSection(u.searchParams.get('section'));let data=readLocalState(section);
-      if(!data){data=await readSupabase(section);if(data&&data.state){try{fs.writeFileSync(stateFile(section),JSON.stringify(data),'utf8')}catch{}}}
+      const section=cleanSection(u.searchParams.get('section'));let data=await readSupabase(section);
+      if(data&&data.state){try{fs.writeFileSync(stateFile(section),JSON.stringify(data),'utf8')}catch{}}
+      else data=readLocalState(section)
       return out(res,200,JSON.stringify(data||{state:null}));
     }
     if(u.pathname==='/api/state'&&req.method==='POST'){
       const section=cleanSection(u.searchParams.get('section'));let raw='';for await(const c of req)raw+=c;let state;try{state=JSON.parse(raw)}catch{return out(res,400,JSON.stringify({error:'json'}))}
-      writeLocalState(section,state);saveSupabase(section,state).then(ok=>console.log('supabase_backup',section,ok?'ok':'failed')).catch(()=>{});return out(res,200,JSON.stringify({ok:true,stored:'server',section}));
+      writeLocalState(section,state);const cloud=await saveSupabase(section,state);console.log('supabase_backup',section,cloud?'ok':'failed');return out(res,cloud?200:503,JSON.stringify({ok:cloud,stored:cloud?'cloud':'local-only',section}));
     }
     if(req.method!=='GET')return out(res,405,'Method not allowed','text/plain; charset=utf-8');
     if(u.pathname==='/'||u.pathname==='/index.html')return out(res,200,home,'text/html; charset=utf-8');
